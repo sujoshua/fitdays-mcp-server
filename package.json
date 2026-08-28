@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
-    "fitdays-api": "1.0.3",
+    "fitdays-api": "git+https://github.com/sujoshua/fitdays-api.git#af2689d81ab05fdfbf3801014acb67f163dd0149",
     "zod": "4.4.3"
   },
   "devDependencies": {
