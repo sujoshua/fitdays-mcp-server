@@ -21,6 +21,63 @@ const summarizeUser = (u: User) => ({
   uid: u.uid,
 })
 
+const getRecalculateValue = (extensionData: NonNullable<WeightRecord['ext_data']>): unknown => {
+  if (!('recalculate' in extensionData)) return null
+  return extensionData.recalculate
+}
+
+const summarizeExtensionData = (extensionData: NonNullable<WeightRecord['ext_data']> | null) => {
+  if (extensionData === null) return null
+
+  return {
+    age: extensionData.age,
+    bfmControl: extensionData.bfmControl,
+    bfmMax: extensionData.bfmMax,
+    bfmMin: extensionData.bfmMin,
+    bfmStandard: extensionData.bfmStandard,
+    bfpMax: extensionData.bfpMax,
+    bfpMin: extensionData.bfpMin,
+    bfpStandard: extensionData.bfpStandard,
+    bmiMax: extensionData.bmiMax,
+    bmiMin: extensionData.bmiMin,
+    bmiStandard: extensionData.bmiStandard,
+    bmrMax: extensionData.bmrMax,
+    bmrMin: extensionData.bmrMin,
+    bmrStandard: extensionData.bmrStandard,
+    bodyScore: extensionData.bodyScore,
+    bodyType: extensionData.bodyType,
+    boneMax: extensionData.boneMax,
+    boneMin: extensionData.boneMin,
+    deviceModelExt: extensionData.deviceModelExt,
+    deviceNameExt: extensionData.deviceNameExt,
+    deviceSoftwareVer: extensionData.deviceSoftwareVer,
+    ffmControl: extensionData.ffmControl,
+    ffmStandard: extensionData.ffmStandard,
+    height: extensionData.height,
+    muscleMassMax: extensionData.muscleMassMax,
+    muscleMassMin: extensionData.muscleMassMin,
+    obesityDegree: extensionData.obesityDegree,
+    onlyMeasureWeight: extensionData.onlyMeasureWeight === '1',
+    proteinMassMax: extensionData.proteinMassMax,
+    proteinMassMin: extensionData.proteinMassMin,
+    recalculate: getRecalculateValue(extensionData),
+    sex: extensionData.sex,
+    smi: extensionData.smi,
+    smmMax: extensionData.smmMax,
+    smmMin: extensionData.smmMin,
+    smmStandard: extensionData.smmStandard,
+    targetBodyfatMass: extensionData.targetBodyfatMass ?? null,
+    targetSMMMass: extensionData.targetSMMMass ?? null,
+    targetWeight: extensionData.targetWeight,
+    waterMassMax: extensionData.waterMassMax,
+    waterMassMin: extensionData.waterMassMin,
+    weightControl: extensionData.weightControl,
+    weightMax: extensionData.weightMax,
+    weightMin: extensionData.weightMin,
+    weightStandard: extensionData.weightStandard,
+  }
+}
+
 const summarizeWeight = (r: WeightRecord) => ({
   bfr_pct: r.bfr,
   bm_kg: r.bm,
@@ -28,11 +85,13 @@ const summarizeWeight = (r: WeightRecord) => ({
   bmr_kcal: r.bmr,
   bodyage: r.bodyage,
   data_id: r.data_id,
+  ext_data: summarizeExtensionData(r.ext_data),
   is_deleted: r.is_deleted,
   measured_at: new Date(r.measured_time * 1000).toISOString(),
   measured_time: r.measured_time,
   pp_pct: r.pp,
   rom_pct: r.rom,
+  rosm_pct: r.rosm,
   sfr_pct: r.sfr,
   suid: r.suid,
   uid: r.uid,
@@ -106,7 +165,12 @@ export const buildServer = (session: FitDaysSession): McpServer => {
       description: joinDescriptionLines([
         'Return body-composition / weight measurements, optionally filtered by sub-user (`suid`) and time window.',
         'Data is fetched lazily when no valid cache exists and stored in a global cache shared by all tools for 5 minutes; subsequent queries use that cached snapshot until it expires. Use `refresh_sync` if you are within the 5-minute cache window and fresher data is required.',
-        'Returns a list ordered newest first. Each measurement contains `weight_kg`, `weight_lb`, `bmi`, `bfr_pct` (body fat percentage), `rom_pct` (muscle percentage), `vwc_pct` (body water percentage), `pp_pct` (protein percentage), `sfr_pct` (subcutaneous fat percentage), `uvi` (visceral fat index), `bm_kg` (bone mass), `bmr_kcal` (basal metabolic rate), `bodyage` (body age), `measured_at` (ISO 8601 timestamp), `measured_time` (Unix-seconds timestamp), `data_id`, `suid`, `uid`, and `is_deleted`.',
+        'Returns a list ordered newest first. Each measurement contains `weight_kg`, `weight_lb`, `bmi`, `bfr_pct` (body fat percentage), `rom_pct` (muscle percentage), `rosm_pct` (skeletal muscle percentage), `vwc_pct` (body water percentage), `pp_pct` (protein percentage), `sfr_pct` (subcutaneous fat percentage), `uvi` (visceral fat index), `bm_kg` (bone mass), `bmr_kcal` (basal metabolic rate), `bodyage` (body age), `measured_at` (ISO 8601 timestamp), `measured_time` (Unix-seconds timestamp), `data_id`, `suid`, `uid`, `is_deleted`, and `ext_data`.',
+        'The optional `ext_data` object contains selected FitDays reference fields: `age` and `height` are the age and height used to calculate body metrics; `sex` is the FitDays biological-sex code; `onlyMeasureWeight` indicates whether the record is weight-only and is returned as a boolean; `recalculate` indicates whether recalculation is needed; and `deviceModelExt`, `deviceNameExt`, and `deviceSoftwareVer` provide device metadata.',
+        'The `ext_data` body-composition references include `bfmControl` (body-fat-mass adjustment), `bfmMin`/`bfmMax`/`bfmStandard` (body-fat-mass lower bound, upper bound, and optimal standard), `bfpMin`/`bfpMax`/`bfpStandard` (body-fat-percentage lower bound, upper bound, and optimal standard), `bmiMin`/`bmiMax`/`bmiStandard` (BMI lower bound, upper bound, and optimal standard), and `bmrMin`/`bmrMax`/`bmrStandard` (basal-metabolic-rate lower bound, upper bound, and optimal standard).',
+        'Additional `ext_data` references include `boneMin`/`boneMax` (bone-mass range), `muscleMassMin`/`muscleMassMax` (muscle-mass range), `smmMin`/`smmMax`/`smmStandard` (skeletal-muscle-mass lower bound, upper bound, and optimal standard), `ffmControl` (fat-free-mass adjustment), `ffmStandard` (standard fat-free mass), `proteinMassMin`/`proteinMassMax` (protein-mass range), `waterMassMin`/`waterMassMax` (water-mass range), and `smi` (skeletal-muscle index).',
+        'The remaining `ext_data` references are `weightControl` (weight adjustment), `weightMin`/`weightMax`/`weightStandard` (weight lower bound, upper bound, and optimal standard), `bodyScore` (overall body score), `bodyType` (numeric body-type classification code), `obesityDegree` (obesity-degree indicator), and `targetWeight` (target weight). `targetBodyfatMass` and `targetSMMMass` represent target body-fat mass and target skeletal-muscle mass; they are returned as `null` when FitDays does not provide them.',
+        'The `ext_data` object is optional and may be `null`; these values are FitDays reference/context data rather than replacements for the primary measurement fields above.',
         'By default includes tombstoned records (`is_deleted: 1`); set `include_deleted: false` to hide them.',
       ]),
       inputSchema: {
@@ -144,7 +208,9 @@ export const buildServer = (session: FitDaysSession): McpServer => {
       description: joinDescriptionLines([
         'Return the most recent body-composition / weight measurement in the current global cache, optionally for a single sub-user(suid).',
         'Data is fetched lazily when no valid cache exists and stored in a global cache shared by all tools for 5 minutes; subsequent queries use that cached snapshot until it expires. Use `refresh_sync` if you are within the 5-minute cache window and fresher data is required.',
-        'Returns exactly one measurement containing `weight_kg`, `weight_lb`, `bmi`, `bfr_pct` (body fat percentage), `rom_pct` (muscle percentage), `vwc_pct` (body water percentage), `pp_pct` (protein percentage), `sfr_pct` (subcutaneous fat percentage), `uvi` (visceral fat index), `bm_kg` (bone mass), `bmr_kcal` (basal metabolic rate), `bodyage` (body age), `measured_at` (ISO 8601 timestamp), `measured_time` (Unix-seconds timestamp), `data_id`, `suid`, `uid`, and `is_deleted`, or `null` if no matching measurement exists.',
+        'Returns exactly one measurement containing `weight_kg`, `weight_lb`, `bmi`, `bfr_pct` (body fat percentage), `rom_pct` (muscle percentage), `rosm_pct` (skeletal muscle percentage), `vwc_pct` (body water percentage), `pp_pct` (protein percentage), `sfr_pct` (subcutaneous fat percentage), `uvi` (visceral fat index), `bm_kg` (bone mass), `bmr_kcal` (basal metabolic rate), `bodyage` (body age), `measured_at` (ISO 8601 timestamp), `measured_time` (Unix-seconds timestamp), `data_id`, `suid`, `uid`, `is_deleted`, and `ext_data`, or `null` if no matching measurement exists.',
+        'The optional `ext_data` object contains the selected FitDays reference fields `age`, `height`, `sex`, `onlyMeasureWeight` (returned as a boolean), `recalculate`, device metadata (`deviceModelExt`, `deviceNameExt`, `deviceSoftwareVer`), body-composition ranges and standards (`bfmControl`, `bfmMin`, `bfmMax`, `bfmStandard`, `bfpMin`, `bfpMax`, `bfpStandard`, `bmiMin`, `bmiMax`, `bmiStandard`, `bmrMin`, `bmrMax`, `bmrStandard`), composition references (`boneMin`, `boneMax`, `muscleMassMin`, `muscleMassMax`, `smmMin`, `smmMax`, `smmStandard`, `ffmControl`, `ffmStandard`, `proteinMassMin`, `proteinMassMax`, `waterMassMin`, `waterMassMax`, `smi`), and targets/classifications (`weightControl`, `weightMin`, `weightMax`, `weightStandard`, `bodyScore`, `bodyType`, `obesityDegree`, `targetWeight`, `targetBodyfatMass`, and `targetSMMMass`). These are reference/context values, and the target-mass fields are `null` when FitDays does not provide them.',
+        'The `ext_data` object is optional and may be `null`; it should not be treated as a replacement for the primary measurement fields.',
         'By default ignores tombstoned records (`is_deleted: 1`).',
       ]),
       inputSchema: {
