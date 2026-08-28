@@ -11,6 +11,22 @@ const json = (value: unknown) => ({
 
 const joinDescriptionLines = (lines: readonly string[]): string => lines.join('\n')
 
+const BODY_TYPE_LABELS: Readonly<Record<number, string>> = {
+  0: '消瘦型',
+  1: '偏瘦型',
+  2: '肌肉苗条型',
+  3: '苗条型',
+  4: '肌肉型',
+  5: '匀称型',
+  6: '运动员型',
+  7: '偏胖肌肉型',
+  8: '肥胖型',
+  9: '偏胖型',
+  10: '隐性偏胖型',
+}
+
+const getBodyTypeLabel = (bodyType: number): string => BODY_TYPE_LABELS[bodyType] ?? 'unknown'
+
 const summarizeUser = (u: User) => ({
   birthday: u.birthday,
   height_cm: u.height,
@@ -46,6 +62,7 @@ const summarizeExtensionData = (extensionData: NonNullable<WeightRecord['ext_dat
     bmrStandard: extensionData.bmrStandard,
     bodyScore: extensionData.bodyScore,
     bodyType: extensionData.bodyType,
+    bodyTypeLabel: getBodyTypeLabel(extensionData.bodyType),
     boneMax: extensionData.boneMax,
     boneMin: extensionData.boneMin,
     deviceModelExt: extensionData.deviceModelExt,
@@ -166,10 +183,11 @@ export const buildServer = (session: FitDaysSession): McpServer => {
         'Return body-composition / weight measurements, optionally filtered by sub-user (`suid`) and time window.',
         'Data is fetched lazily when no valid cache exists and stored in a global cache shared by all tools for 5 minutes; subsequent queries use that cached snapshot until it expires. Use `refresh_sync` if you are within the 5-minute cache window and fresher data is required.',
         'Returns a list ordered newest first. Each measurement contains `weight_kg`, `weight_lb`, `bmi`, `bfr_pct` (body fat percentage), `rom_pct` (muscle percentage), `rosm_pct` (skeletal muscle percentage), `vwc_pct` (body water percentage), `pp_pct` (protein percentage), `sfr_pct` (subcutaneous fat percentage), `uvi` (visceral fat index), `bm_kg` (bone mass), `bmr_kcal` (basal metabolic rate), `bodyage` (body age), `measured_at` (ISO 8601 timestamp), `measured_time` (Unix-seconds timestamp), `data_id`, `suid`, `uid`, `is_deleted`, and `ext_data`.',
-        'The optional `ext_data` object contains selected FitDays reference fields: `age` and `height` are the age and height used to calculate body metrics; `sex` is the FitDays biological-sex code; `onlyMeasureWeight` indicates whether the record is weight-only and is returned as a boolean; `recalculate` indicates whether recalculation is needed; and `deviceModelExt`, `deviceNameExt`, and `deviceSoftwareVer` provide device metadata.',
+        'The optional `ext_data` object contains selected FitDays reference fields: `age` and `height` are the age and height used to calculate body metrics; `sex` is the FitDays biological-sex code (`0` means male and `1` means female); `onlyMeasureWeight` indicates whether the record is weight-only and is returned as a boolean; `recalculate` reports the local recalculation status (`true` means the App has completed or marked local recalculation, `false` means it has not been marked, and `null` means unknown); and `deviceModelExt`, `deviceNameExt`, and `deviceSoftwareVer` provide device metadata.',
         'The `ext_data` body-composition references include `bfmControl` (body-fat-mass adjustment), `bfmMin`/`bfmMax`/`bfmStandard` (body-fat-mass lower bound, upper bound, and optimal standard), `bfpMin`/`bfpMax`/`bfpStandard` (body-fat-percentage lower bound, upper bound, and optimal standard), `bmiMin`/`bmiMax`/`bmiStandard` (BMI lower bound, upper bound, and optimal standard), and `bmrMin`/`bmrMax`/`bmrStandard` (basal-metabolic-rate lower bound, upper bound, and optimal standard).',
         'Additional `ext_data` references include `boneMin`/`boneMax` (bone-mass range), `muscleMassMin`/`muscleMassMax` (muscle-mass range), `smmMin`/`smmMax`/`smmStandard` (skeletal-muscle-mass lower bound, upper bound, and optimal standard), `ffmControl` (fat-free-mass adjustment), `ffmStandard` (standard fat-free mass), `proteinMassMin`/`proteinMassMax` (protein-mass range), `waterMassMin`/`waterMassMax` (water-mass range), and `smi` (skeletal-muscle index).',
-        'The remaining `ext_data` references are `weightControl` (weight adjustment), `weightMin`/`weightMax`/`weightStandard` (weight lower bound, upper bound, and optimal standard), `bodyScore` (overall body score), `bodyType` (numeric body-type classification code), `obesityDegree` (obesity-degree indicator), and `targetWeight` (target weight). `targetBodyfatMass` and `targetSMMMass` represent target body-fat mass and target skeletal-muscle mass; they are returned as `null` when FitDays does not provide them.',
+        'The remaining `ext_data` references are `weightControl` (weight adjustment), `weightMin`/`weightMax`/`weightStandard` (weight lower bound, upper bound, and optimal standard), `bodyScore` (overall body score), `bodyType` (original numeric body-type code), `bodyTypeLabel` (the corresponding body-type classification), `obesityDegree` (obesity-degree indicator), and `targetWeight` (target weight). `targetBodyfatMass` and `targetSMMMass` represent target body-fat mass and target skeletal-muscle mass; they are returned as `null` when FitDays does not provide them.',
+        'Interpret `bodyType` through `bodyTypeLabel`: `0` means 消瘦型, `1` 偏瘦型, `2` 肌肉苗条型, `3` 苗条型, `4` 肌肉型, `5` 匀称型, `6` 运动员型, `7` 偏胖肌肉型, `8` 肥胖型, `9` 偏胖型, and `10` 隐性偏胖型. Use the label when explaining the result, keep the numeric code as the original FitDays value, and treat `unknown` as an unrecognized code rather than guessing.',
         'The `ext_data` object is optional and may be `null`; these values are FitDays reference/context data rather than replacements for the primary measurement fields above.',
         'By default includes tombstoned records (`is_deleted: 1`); set `include_deleted: false` to hide them.',
       ]),
@@ -209,8 +227,9 @@ export const buildServer = (session: FitDaysSession): McpServer => {
         'Return the most recent body-composition / weight measurement in the current global cache, optionally for a single sub-user(suid).',
         'Data is fetched lazily when no valid cache exists and stored in a global cache shared by all tools for 5 minutes; subsequent queries use that cached snapshot until it expires. Use `refresh_sync` if you are within the 5-minute cache window and fresher data is required.',
         'Returns exactly one measurement containing `weight_kg`, `weight_lb`, `bmi`, `bfr_pct` (body fat percentage), `rom_pct` (muscle percentage), `rosm_pct` (skeletal muscle percentage), `vwc_pct` (body water percentage), `pp_pct` (protein percentage), `sfr_pct` (subcutaneous fat percentage), `uvi` (visceral fat index), `bm_kg` (bone mass), `bmr_kcal` (basal metabolic rate), `bodyage` (body age), `measured_at` (ISO 8601 timestamp), `measured_time` (Unix-seconds timestamp), `data_id`, `suid`, `uid`, `is_deleted`, and `ext_data`, or `null` if no matching measurement exists.',
-        'The optional `ext_data` object contains the selected FitDays reference fields `age`, `height`, `sex`, `onlyMeasureWeight` (returned as a boolean), `recalculate`, device metadata (`deviceModelExt`, `deviceNameExt`, `deviceSoftwareVer`), body-composition ranges and standards (`bfmControl`, `bfmMin`, `bfmMax`, `bfmStandard`, `bfpMin`, `bfpMax`, `bfpStandard`, `bmiMin`, `bmiMax`, `bmiStandard`, `bmrMin`, `bmrMax`, `bmrStandard`), composition references (`boneMin`, `boneMax`, `muscleMassMin`, `muscleMassMax`, `smmMin`, `smmMax`, `smmStandard`, `ffmControl`, `ffmStandard`, `proteinMassMin`, `proteinMassMax`, `waterMassMin`, `waterMassMax`, `smi`), and targets/classifications (`weightControl`, `weightMin`, `weightMax`, `weightStandard`, `bodyScore`, `bodyType`, `obesityDegree`, `targetWeight`, `targetBodyfatMass`, and `targetSMMMass`). These are reference/context values, and the target-mass fields are `null` when FitDays does not provide them.',
-        'The `ext_data` object is optional and may be `null`; it should not be treated as a replacement for the primary measurement fields.',
+        'The optional `ext_data` object contains the selected FitDays reference fields `age`, `height`, `sex` (`0` means male and `1` means female), `onlyMeasureWeight` (returned as a boolean), `recalculate` (local recalculation status: `true` means completed or marked by the App, `false` means not marked, and `null` means unknown), device metadata (`deviceModelExt`, `deviceNameExt`, `deviceSoftwareVer`), body-composition ranges and standards (`bfmControl`, `bfmMin`, `bfmMax`, `bfmStandard`, `bfpMin`, `bfpMax`, `bfpStandard`, `bmiMin`, `bmiMax`, `bmiStandard`, `bmrMin`, `bmrMax`, `bmrStandard`), composition references (`boneMin`, `boneMax`, `muscleMassMin`, `muscleMassMax`, `smmMin`, `smmMax`, `smmStandard`, `ffmControl`, `ffmStandard`, `proteinMassMin`, `proteinMassMax`, `waterMassMin`, `waterMassMax`, `smi`), and targets/classifications (`weightControl`, `weightMin`, `weightMax`, `weightStandard`, `bodyScore`, `bodyType`, `bodyTypeLabel`, `obesityDegree`, `targetWeight`, `targetBodyfatMass`, and `targetSMMMass`). These are reference/context values, and the target-mass fields are `null` when FitDays does not provide them.',
+        'Interpret `bodyType` through `bodyTypeLabel`: `0` means 消瘦型, `1` 偏瘦型, `2` 肌肉苗条型, `3` 苗条型, `4` 肌肉型, `5` 匀称型, `6` 运动员型, `7` 偏胖肌肉型, `8` 肥胖型, `9` 偏胖型, and `10` 隐性偏胖型. Use the label when explaining the result, keep the numeric code as the original FitDays value, and treat `unknown` as an unrecognized code rather than guessing.',
+        'Do not recalculate measurements or send a recalculation request based on `ext_data.recalculate`; report its status only.',
         'By default ignores tombstoned records (`is_deleted: 1`).',
       ]),
       inputSchema: {
